@@ -1,0 +1,75 @@
+name: Release Automation
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  generate-notes:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Get changes since last release
+        run: |
+          git fetch --tags
+          git log --pretty=format:"- %s" --since="30 days ago" > changes.md
+
+  build-package:
+    runs-on: ubuntu-latest
+    needs: generate-notes
+    
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - run: npm ci
+      - run: npm run lint:ci
+      - run: npm test
+      
+      - name: Create release bundle
+        run: |
+          mkdir -p dist
+          cp -r src dist/
+          cp package.json dist/
+          cp run.js dist/
+          tar -czf release-bundle.tar.gz dist/
+
+  update-release:
+    runs-on: ubuntu-latest
+    needs: [generate-notes, build-package]
+    if: github.event_name == 'release'
+    
+    permissions:
+      contents: write
+      
+    steps:
+      - name: Create release notes
+        run: |
+          echo "# Release ${{ github.event.release.tag_name }}" > notes.md
+          echo "" >> notes.md
+          echo "## Changes" >> notes.md
+          cat changes.md >> notes.md
+          echo "" >> notes.md
+          echo "Generated on $(date)" >> notes.md
+          
+      - name: Update release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: context.payload.release.id,
+              body: require('fs').readFileSync('notes.md', 'utf8')
+            })
