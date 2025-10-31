@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Install deps
+        run: npm install
+      
+      # Run linting first to catch style issues
+      - name: Lint code
+        run: npm run lint
+      
+      # Then run tests
+      - name: Test
+        run: npm test
+      
+      # Finally try to build
+      - name: Build
+        run: npm run build
+      
+      - name: Success
+        if: success()
+        run: echo "All checks passed!"
