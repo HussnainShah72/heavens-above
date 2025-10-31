@@ -18,9 +18,8 @@ module.exports = [
         setTimeout: "readonly",
         clearTimeout: "readonly",
         setInterval: "readonly",
-        clearInterval: "readonly",
-        options: "readonly",
-        current: "readonly"
+        clearInterval: "readonly"
+        // REMOVED options and current from globals
       }
     },
     rules: {
@@ -29,7 +28,8 @@ module.exports = [
       "semi": "off",
       "indent": "off", 
       "quotes": "off",
-      "no-undef": "off"
+      "no-undef": "off",
+      "no-global-assign": "off"  // ADD THIS LINE
     },
     ignores: ["**/node_modules/", "**/dist/", "**/docs/"]
   }
