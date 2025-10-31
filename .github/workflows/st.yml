@@ -1,0 +1,122 @@
+name: Scheduled Maintenance and Deployment
+
+on:
+  schedule:
+    # Run every Sunday at 3:00 AM UTC
+    - cron: '0 3 * * 0'
+    # Run on 1st of every month at 4:00 AM UTC
+    - cron: '0 4 1 * *'
+  workflow_dispatch:
+
+jobs:
+  maintenance:
+    runs-on: ubuntu-latest
+    name: Weekly Maintenance
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm install
+        
+      - name: Run health checks
+        run: |
+          echo "Running scheduled health checks..."
+          npm run lint:ci
+          npm test
+          echo "Health checks completed successfully"
+        
+      - name: Check repository size
+        run: |
+          echo "Repository size analysis:"
+          du -sh . || echo "Size check not available"
+          find . -name "*.log" -size +1M | head -5 || echo "No large log files found"
+          
+      - name: Update documentation
+        run: |
+          echo "Updating documentation..."
+          npm run docs:build
+          echo "Documentation updated"
+          
+      - name: Generate maintenance report
+        run: |
+          echo "# Weekly Maintenance Report" > maintenance-report.md
+          echo "Generated: $(date)" >> maintenance-report.md
+          echo "Status:  All checks passed" >> maintenance-report.md
+          echo "## Tasks Completed:" >> maintenance-report.md
+          echo "- Code quality checks" >> maintenance-report.md
+          echo "- Test suite execution" >> maintenance-report.md  
+          echo "- Documentation update" >> maintenance-report.md
+          echo "- Repository health check" >> maintenance-report.md
+
+  deploy-docs:
+    runs-on: ubuntu-latest
+    name: Deploy Documentation
+    needs: maintenance
+    if: always()
+    
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Build documentation
+        run: |
+          npm install
+          npm run docs:build
+          
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+        
+      - name: Upload to Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/build
+          
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        
+      - name: Report deployment status
+        run: |
+          if [ "${{ steps.deployment.outcome }}" == "success" ]; then
+            echo " Documentation deployed to GitHub Pages"
+            echo "URL: ${{ steps.deployment.outputs.page_url }}"
+          else
+            echo " GitHub Pages deployment skipped (not enabled or failed)"
+            echo "To enable: Repository Settings → Pages → Build and deployment → GitHub Actions"
+          fi
+
+  summary:
+    runs-on: ubuntu-latest
+    name: Summary Report
+    needs: [maintenance, deploy-docs]
+    if: always()
+    
+    steps:
+      - name: Generate final report
+        run: |
+          echo " Scheduled Maintenance Summary"
+          echo "================================"
+          echo "Maintenance: ${{ needs.maintenance.result }}"
+          echo "Deployment: ${{ needs.deploy-docs.result }}"
+          echo "Timestamp: $(date)"
+          echo "All scheduled tasks completed"
