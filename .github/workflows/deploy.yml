@@ -1,0 +1,57 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - run: npm install
+      
+      # Make sure code quality is good before deploying
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      # Copy files to deployment directory
+      - name: Prepare files
+        run: |
+          mkdir -p _site
+          cp -r public/* _site/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - run: echo "Deployed to ${{ steps.deployment.outputs.page_url }}"
