@@ -1,0 +1,139 @@
+name: Code Review
+
+on:
+  pull_request:
+    branches: [main, master]
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  code-quality:
+    runs-on: ubuntu-latest
+    name: Code Quality Analysis
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run ESLint analysis
+        uses: reviewdog/action-eslint@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review
+          eslint_flags: '--ext .js --max-warnings 200'
+          
+      - name: Check code complexity
+        run: |
+          npx complexity-report --maxcyc 15 . || echo "Complexity analysis completed"
+          
+      - name: Detect secrets in code
+        uses: secret-scanner/action@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Security Scan
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run npm audit
+        run: npm audit --audit-level high
+        
+      - name: Snyk security scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  test-coverage:
+    runs-on: ubuntu-latest
+    name: Test Coverage
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Run tests with coverage
+        run: npm test
+        
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: code-coverage
+
+  size-analysis:
+    runs-on: ubuntu-latest
+    name: Bundle Size Analysis
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Analyze file sizes
+        run: |
+          find src -name "*.js" -exec wc -l {} + | sort -nr | head -10
+          
+      - name: Check for large dependencies
+        run: npm ls --depth=0 --parseable | wc -l
+
+  required-checks:
+    runs-on: ubuntu-latest
+    name: Required Checks Status
+    needs: [code-quality, security-scan, test-coverage]
+    
+    steps:
+      - name: Aggregate review status
+        run: |
+          if [ "${{ needs.code-quality.result }}" == "success" ] && \
+             [ "${{ needs.security-scan.result }}" == "success" ] && \
+             [ "${{ needs.test-coverage.result }}" == "success" ]; then
+            echo "All code review checks passed"
+          else
+            echo "Some code review checks failed"
+            exit 1
+          fi
