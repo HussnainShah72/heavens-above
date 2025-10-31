@@ -2,9 +2,8 @@
 
 ## 📋 Assignment Overview
 **Course Learning Outcome**: CLO 4 - Implement Version Control Systems  
-**Student**: [Your Name]  
+**Student**: Hussnain Haider  
 **Project**: Heavens Above Web Scraper  
-**Repository**: [Your GitHub URL]
 
 ---
 
